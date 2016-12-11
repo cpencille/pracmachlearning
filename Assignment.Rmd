@@ -1,0 +1,97 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Chris Pencille"
+date: "December 10, 2016"
+output: html_document
+keep_md: yes
+---
+
+## Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [link](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).
+
+The following analysis will try and predict the manner in which each individual excercised. The data can be found with the following:
+1) Training: [link](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+2) Testing: [link](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The training set will be used to develop a predictive model to determine which variable(s) is the best at predicting the variable "Classe" in the dataset, which is the way each person exercised to predict the 20 cases in the testing data set. 
+We will also need the following R packages to complete the analysis and model development: caret, randomForest, rattle,rpart, and rpart.plot
+
+
+## Data Cleansing
+A brief summary of the data cleansing is removal of the ID variable that just shows what record each row is, removing any variables with NA values, adn removing any near zero variance variabes. The dataset will then be split into 2 datasets, one for developing the model and one for testing the model.
+
+```{r, echo=FALSE}
+setwd("E:/Data Science Certification/Practical Machine Learning")
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url,"training.csv")
+training<-read.csv("training.csv",na.strings = c("NA",""))
+url<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url,"testing.csv")
+testing<-read.csv("testing.csv",na.strings = c("NA",""))
+training<-training[c(-1)]
+testing<-testing[c(-1)]
+training<-training[,colSums(is.na(training))==0]
+testing<-testing[,colSums(is.na(testing))==0]
+training<-training[,8:length(training)]
+testing<-testing[,8:length(testing)]
+```
+To ensure the model is good, the training dataset will be split into two groups, one for building the model (60% of the data) and then one to validate the model (40% of the data). A seed will also need to be set for any randomization done throughout the analysis, which is set to 22. The building model data set contains 11,776 observations with 52 variables and the set to validate the model contains 7,846 observations of the same 52 variables.
+
+```{r, echo=FALSE}
+set.seed(22)
+t<-createDataPartition(y = training$classe, p = .6, list=FALSE)
+trainingbuild<-training[t,]
+trainingtest<-training[-t,]
+set.seed(22)
+nzv<-nearZeroVar(trainingbuild,saveMetrics = TRUE)
+trainingbuild<-trainingbuild[,nzv$nzv=="FALSE"]
+```
+
+##Model Creation
+
+#Classification Trees
+The analysis will start will running a classification tree, by using a 5-fold cross validation to save some time in calculation instead of the default 10 fold.
+
+```{r, echo=FALSE}
+set.seed(22)
+control<-trainControl(method = "cv",number = 5)
+set.seed(22)
+fit_rpart<-train(classe~.,data = trainingbuild,method = "rpart", trControl = control)
+set.seed(22)
+fancyRpartPlot(fit_rpart$finalModel)
+```
+
+There are several layers to the RpartPlot and give a good stepping start to building the model. The accuracy of this model will need to be chacked to make sure the out-of-sample error rate is good.
+
+```{r, echo=FALSE}
+set.seed(22)
+predict_rpart<-predict(fit_rpart,trainingtest)
+set.seed(22)
+conf_rpart<-confusionMatrix(trainingtest$classe,predict_rpart)
+set.seed(22)
+accuracy_rpart<-conf_rpart$overall[1]
+accuracy_rpart
+```
+The accuracy for this model is rather low at 48% so it does not predict the classe variable in the data set very well. The next method to look at will be random forests.
+
+#Random Forests
+
+The accuracy of this model will also need to be checked to ensure it is a good model or at least better than the classification tree.
+
+```{r, echo=FALSE}
+set.seed(22)
+fit_rf<-train(classe~.,data = trainingbuild,method = "rf", trControl = control)
+set.seed(22)
+predict_rf<-predict(fit_rf, trainingtest)
+set.seed(22)
+conf_rf<-confusionMatrix(trainingtest$classe,predict_rf)
+set.seed(22)
+accuracy_rf<-conf_rf$overall[1]
+accuracy_rf
+```
+The accruacy of this model is 99% which means it is a very good model. That means we should be able to predict the testing data set very well.
